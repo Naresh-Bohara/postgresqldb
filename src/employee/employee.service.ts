@@ -64,6 +64,7 @@ export class EmployeeService {
         dept: filters.department,
       });
     }
+    
     return query.getMany();
   }
 }
