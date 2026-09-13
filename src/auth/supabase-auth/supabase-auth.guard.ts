@@ -4,50 +4,34 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Observable } from 'rxjs';
+import * as jwt from 'jsonwebtoken';
 import { Request } from 'express';
-import jwt, { JwtPayload } from 'jsonwebtoken';
-
-interface AuthUser extends JwtPayload {
-  sub: string;
-  email?: string;
-  role?: string;
-}
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class SupabaseAuthGuard implements CanActivate {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private configService: ConfigService) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  canActivate(
+    context: ExecutionContext,
+  ): boolean | Promise<boolean> | Observable<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const authHeader = request.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Authentication token required');
+    const authHeader = request.headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No Token Provided!');
     }
-    const token = authHeader.substring(7);
-    if (!token) {
-      throw new UnauthorizedException('Authentication token required');
-    }
-
-    const jwtSecret = this.configService.get<string>('JWT_SECRET');
+    const token = authHeader.split(' ')[1];
+    const jwtSecret = this.configService.get<string>('SUPABASE_JWT_SECRET');
     if (!jwtSecret) {
-      throw new UnauthorizedException('JWT configuration is missing');
+      throw new UnauthorizedException('JWT Secrete not found');
     }
     try {
-      const decoded = jwt.verify(token, jwtSecret, {
-        algorithms: ['HS256'],
-      });
-      if (typeof decoded === 'string') {
-        throw new UnauthorizedException('Invalid authentication token');
-      }
-      const user = decoded as AuthUser;
-      if (!user.sub) {
-        throw new UnauthorizedException('Invalid authentication token');
-      }
-      request.user = user;
+      const decode = jwt.verify(token, jwtSecret);
+      request['user'] = decode;
       return true;
-    } catch {
-      throw new UnauthorizedException('Invalid or expired token');
+    } catch (error) {
+      throw new UnauthorizedException('Invalid Token');
     }
   }
 }
